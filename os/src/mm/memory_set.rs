@@ -14,6 +14,7 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
+use crate::mm::page_table::free_range;
 
 extern "C" {
     fn stext();
@@ -262,6 +263,22 @@ impl MemorySet {
             false
         }
     }
+
+    /// free frames and its pagetable entries
+    pub fn free_frames(&mut self, token: usize, start: usize, len: usize) {
+
+        let vpn_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(start + len).ceil());
+        for area in self.areas.iter_mut() {
+            if area.vpn_range.get_start() <= vpn_range.get_start()
+                && area.vpn_range.get_end() >= vpn_range.get_end()
+            {
+                // 从 data_frames 中移除对应的帧
+                area.free_data_frames(vpn_range);
+            }
+        }
+
+        free_range(token, vpn_range);
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
@@ -354,6 +371,13 @@ impl MapArea {
                 break;
             }
             current_vpn.step();
+        }
+    }
+
+    pub fn free_data_frames(&mut self, vpn_range: VPNRange) {
+        for vpn in vpn_range {
+            // 从 data_frames 中移除对应的帧
+            self.data_frames.remove(&vpn);
         }
     }
 }

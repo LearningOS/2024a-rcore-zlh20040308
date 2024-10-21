@@ -22,8 +22,10 @@ use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
+use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::MapPermission;
+use crate::timer::get_time_ms;
 pub use context::TaskContext;
-
 /// The task manager, where all the tasks are managed.
 ///
 /// Functions implemented on `TaskManager` deals with all task state transitions
@@ -140,6 +142,9 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            if inner.tasks[next].task_first_be_called_time != 0 {
+                inner.tasks[next].task_first_be_called_time = get_time_ms();
+            }
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -152,6 +157,78 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    /// Update the time of the current `Running` task for system calls.
+    fn update_current_task_sys_call_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].task_syscall_times[syscall_id] += 1;
+        drop(inner);
+    }
+
+    /// Get current task status
+    fn get_current_task_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let status = inner.tasks[current].task_status;
+        drop(inner);
+        status
+    }
+
+    fn get_current_task_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let task_syscall_times = inner.tasks[current].task_syscall_times;
+        drop(inner);
+        task_syscall_times
+    }
+
+    /// Get the total time of all running tasks.
+    fn get_current_task_total_running_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let total_running_time = get_time_ms() - inner.tasks[current].task_first_be_called_time;
+        drop(inner);
+        total_running_time
+    }
+
+    /// Inserts a framed area into the current task's memory set with specified permissions based on the port value.
+    fn insert_current_task_frame(&self, _start: usize, _len: usize, _port: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let mut perm = MapPermission::U;
+
+        if _port & 0x1 != 0 {
+            perm |= MapPermission::R
+        }
+        if _port & 0x2 != 0 {
+            perm |= MapPermission::W
+        }
+        if _port & 0x4 != 0 {
+            perm |= MapPermission::X
+        }
+
+        inner.tasks[current].memory_set.insert_framed_area(
+            _start.into(),
+            (_start + _len).into(),
+            perm,
+        );
+        drop(inner);
+    }
+
+    /// Free some frames from the current task's memory set.
+    fn free_current_task_frame(&self, _start: usize, _len: usize) {
+        let token = current_user_token();
+
+        let mut inner = self.inner.exclusive_access();
+
+        let current = inner.current_task;
+        inner.tasks[current]
+            .memory_set
+            .free_frames(token, _start, _len);
+
+        drop(inner);
     }
 }
 
@@ -201,4 +278,31 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// Update the time of the current `Running` task for system calls.
+pub fn update_current_task_sys_call_times(syscall_id: usize) {
+    TASK_MANAGER.update_current_task_sys_call_times(syscall_id);
+}
+/// Get current task status
+pub fn get_current_task_status() -> TaskStatus {
+    TASK_MANAGER.get_current_task_status()
+}
+/// Get current task syscall times
+pub fn get_current_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_current_task_syscall_times()
+}
+/// Get the total time of all running tasks.
+pub fn get_current_task_total_running_time() -> usize {
+    TASK_MANAGER.get_current_task_total_running_time()
+}
+
+/// Inserts a framed area into the current task's memory set with specified permissions based on the port value.
+pub fn insert_current_task_frame(_start: usize, _len: usize, _port: usize) {
+    TASK_MANAGER.insert_current_task_frame(_start, _len, _port);
+}
+
+/// Free some frames from the current task's memory set.
+pub fn free_current_task_frame(_start: usize, _len: usize) {
+    TASK_MANAGER.free_current_task_frame(_start, _len);
 }
