@@ -187,7 +187,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     }
 
     if range_is_unmapped(current_user_token(), _start.into(), (_start + _len).into()) {
-        println!("Alreadt unmapped.");
+        println!("Already unmapped.");
         return -1; // 或者根据需要处理错误
     }
 

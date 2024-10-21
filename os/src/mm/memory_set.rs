@@ -7,6 +7,7 @@ use super::{StepByOne, VPNRange};
 use crate::config::{
     KERNEL_STACK_SIZE, MEMORY_END, PAGE_SIZE, TRAMPOLINE, TRAP_CONTEXT_BASE, USER_STACK_SIZE,
 };
+use crate::mm::page_table::free_range;
 use crate::sync::UPSafeCell;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
@@ -14,7 +15,6 @@ use alloc::vec::Vec;
 use core::arch::asm;
 use lazy_static::*;
 use riscv::register::satp;
-use crate::mm::page_table::free_range;
 
 extern "C" {
     fn stext();
@@ -264,20 +264,103 @@ impl MemorySet {
         }
     }
 
+    // /// free frames and its pagetable entries
+    // pub fn free_frames(&mut self, token: usize, start: usize, len: usize) {
+
+    //     let vpn_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(start + len).ceil());
+    //     let target_ares: MapArea;
+    //     for area in self.areas.iter_mut() {
+    //         if area.vpn_range.get_start() <= vpn_range.get_start()
+    //             && area.vpn_range.get_end() >= vpn_range.get_end()
+    //         {
+    //             target_ares = area.to_n
+    //             // 从 data_frames 中移除对应的帧
+    //             area.free_data_frames(vpn_range);
+    //         }
+    //     }
+
+    //     free_range(token, vpn_range);
+    // }
+
     /// free frames and its pagetable entries
     pub fn free_frames(&mut self, token: usize, start: usize, len: usize) {
+        let vpn_range = VPNRange::new(
+            VirtAddr::from(start).floor(),
+            VirtAddr::from(start + len).ceil(),
+        );
 
-        let vpn_range = VPNRange::new(VirtAddr::from(start).floor(), VirtAddr::from(start + len).ceil());
-        for area in self.areas.iter_mut() {
+        let mut target_area: Option<MapArea> = None;
+
+        for i in (0..self.areas.len()).rev() {
+            let area = &self.areas[i];
             if area.vpn_range.get_start() <= vpn_range.get_start()
                 && area.vpn_range.get_end() >= vpn_range.get_end()
             {
-                // 从 data_frames 中移除对应的帧
-                area.free_data_frames(vpn_range);
+                // 使用 swap_remove 获取该 area 的所有权
+                target_area = Some(self.areas.swap_remove(i));
+                break;
             }
         }
 
         free_range(token, vpn_range);
+
+        // 现在 target_area 拥有被弹出的 MapArea 的所有权
+        if let Some(mut area) = target_area {
+            // 对 area 执行你需要的操作
+            if area.vpn_range.get_start() == vpn_range.get_start()
+                && area.vpn_range.get_end() == vpn_range.get_end()
+            {
+                return;
+            } else if area.vpn_range.get_end() == vpn_range.get_end() {
+                area.shrink_to(&mut self.page_table, vpn_range.get_start());
+                self.areas.push(area);
+            } else if area.vpn_range.get_start() == vpn_range.get_start() {
+                for vpn in vpn_range {
+                    area.unmap_one(&mut self.page_table, vpn)
+                }
+                area.vpn_range = VPNRange::new(vpn_range.get_end(), area.vpn_range.get_end());
+                self.areas.push(area);
+            } else {
+                let mut start_area = MapArea::new(
+                    area.vpn_range.get_start().into(),
+                    vpn_range.get_start().into(),
+                    area.map_type,
+                    area.map_perm,
+                );
+                let mut end_area = MapArea::new(
+                    area.vpn_range.get_end().into(),
+                    vpn_range.get_end().into(),
+                    area.map_type,
+                    area.map_perm,
+                );
+
+                let mut start_area_keys = Vec::new();
+                let mut end_area_keys = Vec::new();
+
+                for key in area.data_frames.keys() {
+                    if *key >= area.vpn_range.get_start() && *key < vpn_range.get_start() {
+                        start_area_keys.push(key.clone()); // 记录要移除的键
+                    } else if *key >= area.vpn_range.get_end() && *key < vpn_range.get_end() {
+                        end_area_keys.push(key.clone()); // 记录要移除的键
+                    }
+                }
+
+                for key in start_area_keys {
+                    if let Some(value) = area.data_frames.remove(&key) {
+                        start_area.data_frames.insert(key, value); // 直接转移所有权，无需克隆
+                    }
+                }
+
+                for key in end_area_keys {
+                    if let Some(value) = area.data_frames.remove(&key) {
+                        end_area.data_frames.insert(key, value); // 直接转移所有权，无需克隆
+                    }
+                }
+
+                self.areas.push(start_area);
+                self.areas.push(end_area);
+            }
+        }
     }
 }
 /// map area structure, controls a contiguous piece of virtual memory
@@ -373,7 +456,7 @@ impl MapArea {
             current_vpn.step();
         }
     }
-
+    #[allow(unused)]
     pub fn free_data_frames(&mut self, vpn_range: VPNRange) {
         for vpn in vpn_range {
             // 从 data_frames 中移除对应的帧
