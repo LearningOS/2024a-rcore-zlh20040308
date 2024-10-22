@@ -1,7 +1,7 @@
 //! Types related to task management & Functions for completely changing TCB
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
-use crate::config::TRAP_CONTEXT_BASE;
+use crate::config::{BIG_STRIDE, MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
@@ -68,6 +68,21 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// The numbers of syscall called by task
+    pub task_syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// Total running time of task
+    pub task_first_be_called_time: usize,
+
+    /// Priority of task
+    pub task_priority: isize,
+
+    /// Pass of task
+    pub task_pass: isize,
+
+    /// Stride of task
+    pub task_stride: isize,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +133,11 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    task_syscall_times: [0; MAX_SYSCALL_NUM],
+                    task_first_be_called_time: 0,
+                    task_priority: 16,
+                    task_pass: BIG_STRIDE / 16,
+                    task_stride: 0,
                 })
             },
         };
@@ -191,6 +211,11 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    task_syscall_times: parent_inner.task_syscall_times.clone(),
+                    task_first_be_called_time: parent_inner.task_first_be_called_time,
+                    task_priority: parent_inner.task_priority,
+                    task_pass: parent_inner.task_pass,
+                    task_stride: parent_inner.task_stride,
                 })
             },
         });
@@ -200,6 +225,24 @@ impl TaskControlBlock {
         // **** access child PCB exclusively
         let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
         trap_cx.kernel_sp = kernel_stack_top;
+        // return
+        task_control_block
+        // **** release child PCB
+        // ---- release parent PCB
+    }
+
+    /// parent process spawn the child process
+    pub fn spawn(self: &Arc<Self>, elf_data: &[u8]) -> Arc<Self> {
+        // ---- access parent PCB exclusively
+        let mut parent_inner = self.inner_exclusive_access();
+        // copy user space(include trap context)
+        let task_control_block = Arc::new(TaskControlBlock::new(elf_data));
+        // add child
+        parent_inner.children.push(task_control_block.clone());
+        // modify kernel_sp in trap_cx
+        // **** access child PCB exclusively
+        let trap_cx = task_control_block.inner_exclusive_access().get_trap_cx();
+        trap_cx.kernel_sp = task_control_block.kernel_stack.get_top();
         // return
         task_control_block
         // **** release child PCB

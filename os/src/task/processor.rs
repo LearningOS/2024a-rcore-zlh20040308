@@ -7,7 +7,9 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::mm::MapPermission;
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -61,6 +63,9 @@ pub fn run_tasks() {
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            if task_inner.task_first_be_called_time == 0 {
+                task_inner.task_first_be_called_time = get_time_ms();
+            }
             // release coming task_inner manually
             drop(task_inner);
             // release coming task TCB manually
@@ -108,4 +113,40 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// Update the time of the current `Running` task for system calls.
+pub fn update_current_task_sys_call_times(syscall_id: usize) {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .task_syscall_times[syscall_id] += 1;
+}
+
+/// Inserts a framed area into the current task's memory set with specified permissions based on the port value.
+pub fn insert_current_task_frame(_start: usize, _len: usize, _port: usize) {
+    let mut perm = MapPermission::U;
+    if _port & 0x1 != 0 {
+        perm |= MapPermission::R
+    }
+    if _port & 0x2 != 0 {
+        perm |= MapPermission::W
+    }
+    if _port & 0x4 != 0 {
+        perm |= MapPermission::X
+    }
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .memory_set
+        .insert_framed_area(_start.into(), (_start + _len).into(), perm);
+}
+/// Free some frames from the current task's memory set.
+pub fn free_current_task_frame(_start: usize, _len: usize) {
+    let token = current_user_token();
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .memory_set
+        .free_frames(token, _start, _len);
 }

@@ -105,11 +105,13 @@ pub fn rust_main() -> ! {
     mm::init();
     mm::remap_test();
     task::add_initproc();
+    // no need to care
     println!("after initproc!");
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     loader::list_apps();
+    // no need to care
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }

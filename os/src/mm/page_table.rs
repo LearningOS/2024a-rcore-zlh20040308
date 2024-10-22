@@ -1,5 +1,6 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 use super::{frame_alloc, FrameTracker, PhysAddr, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
+use crate::mm::VPNRange;
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -212,4 +213,48 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// Checks if all virtual pages in the given address range are mapped in the page table.
+/// 在这个范围内只要有一个PAGE被映射过了，就返回true
+pub fn range_is_mapped(token: usize, start_addr: VirtAddr, end_addr: VirtAddr) -> bool {
+    let page_table = PageTable::from_token(token);
+    // Convert virtual addresses to virtual page numbers
+    let start_vpn = start_addr.floor();
+    let end_vpn = end_addr.ceil();
+    // Iterate over the range of virtual page numbers
+    for vpn in VPNRange::new(start_vpn, end_vpn) {
+        let page_table_entry = page_table.translate(vpn);
+        if page_table_entry.is_some() && page_table_entry.unwrap().is_valid() {
+            return true;
+        }
+    }
+    false
+}
+/// Checks if the range of virtual addresses contains any unmapped pages.
+/// 在这个范围内只要有一个PAGE没有被映射过，就返回true，反之，如果全被映射过了，就返回false
+pub fn range_is_unmapped(token: usize, start_addr: VirtAddr, end_addr: VirtAddr) -> bool {
+    let page_table = PageTable::from_token(token);
+    // Convert virtual addresses to virtual page numbers
+    let start_vpn = start_addr.floor();
+    let end_vpn = end_addr.ceil();
+    // Iterate over the range of virtual page numbers
+    for vpn in VPNRange::new(start_vpn, end_vpn) {
+        let page_table_entry = page_table.translate(vpn);
+        // If a virtual page is mapped, return false
+        if page_table.translate(vpn).is_none()
+            || (page_table_entry.is_some() && !page_table_entry.unwrap().is_valid())
+        {
+            return true;
+        }
+    }
+    false // All pages in the range are mapped
+}
+/// Reclaim the page table information within the specified virtual page number range
+pub fn free_range(token: usize, vpn_range: VPNRange) {
+    let mut page_table = PageTable::from_token(token);
+    for vpn in vpn_range {
+        // Unmap the virtual page
+        page_table.unmap(vpn);
+    }
 }

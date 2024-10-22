@@ -23,7 +23,26 @@ impl TaskManager {
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        // 找到 stride 最小的任务及其索引
+        let min_task_index = self
+            .ready_queue
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, task)| task.inner_exclusive_access().task_stride)
+            .map(|(index, _)| index)?;
+
+        // 移除并获取最小 stride 的任务（获得所有权）
+        let task = self.ready_queue.remove(min_task_index)?;
+
+        // 更新任务的 stride
+        {
+            let mut task_guard = task.inner_exclusive_access();
+            task_guard.task_stride += task_guard.task_pass;
+        }
+
+        // 返回该任务
+        Some(task)
+        // self.ready_queue.pop_front()
     }
 }
 
