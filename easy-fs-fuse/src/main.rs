@@ -30,6 +30,7 @@ fn main() {
 }
 
 fn easy_fs_pack() -> std::io::Result<()> {
+    // 解析命令行参数
     let matches = App::new("EasyFileSystem packer")
         .arg(
             Arg::with_name("source")
@@ -49,6 +50,7 @@ fn easy_fs_pack() -> std::io::Result<()> {
     let src_path = matches.value_of("source").unwrap();
     let target_path = matches.value_of("target").unwrap();
     println!("src_path = {}\ntarget_path = {}", src_path, target_path);
+    // 生成一个大小为 16MB 的fs.img文件 
     let block_file = Arc::new(BlockFile(Mutex::new({
         let f = OpenOptions::new()
             .read(true)
@@ -59,6 +61,9 @@ fn easy_fs_pack() -> std::io::Result<()> {
         f
     })));
     // 16MiB, at most 4095 files
+    // 16MiB = 16 * 1MiB = 16 * 1024KiB = 16 * 1024 * 1024Byte = 16 * 2048 blocks
+    // 1 block = 512 Bytes
+    // 格式化这个 fs.img 文件
     let efs = EasyFileSystem::create(block_file, 16 * 2048, 1);
     let root_inode = Arc::new(EasyFileSystem::root_inode(&efs));
     let apps: Vec<_> = read_dir(src_path)

@@ -13,7 +13,6 @@ use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
-
 /// inode in memory
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
@@ -124,6 +123,21 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+/// Create a new hard link to a existing file
+pub fn create_hard_link(old_name: &str, new_name: &str) -> isize {
+    ROOT_INODE.create_hard_link(old_name, new_name)
+}
+
+/// Delete hard links num of a existing file by name
+pub fn delete_hard_link(name: &str) -> isize {
+    ROOT_INODE.delete_hard_link(name)
+}
+
+/// Count hard links num of a existing file by inode_id
+pub fn count_hard_links_num(inode_id: u64) -> u32 {
+    ROOT_INODE.count_hard_links_num(inode_id)
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool {
         self.readable
@@ -154,5 +168,9 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn inode_id(&self) -> u64 {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_inode_id().unwrap() as u64
     }
 }

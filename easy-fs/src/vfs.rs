@@ -183,4 +183,116 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+
+    /// Create a new hard link to a existing file
+    pub fn create_hard_link(&self, old_name: &str, new_name: &str) -> isize {
+        // find the old name file inode id
+        let old_inode_id;
+        let op = |root_inode: &DiskInode| {
+            // assert it is a directory
+            assert!(root_inode.is_dir());
+            // has the file been created?
+            self.find_inode_id(old_name, root_inode)
+        };
+        if let Some(id) = self.read_disk_inode(op) {
+            old_inode_id = id;
+        } else {
+            return -1;
+        }
+        // create a new file link
+        let mut fs = self.fs.lock();
+        self.modify_disk_inode(|root_inode| {
+            // append file in the dirent
+            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            // increase size
+            self.increase_size(new_size as u32, root_inode, &mut fs);
+            // write dirent
+            let dirent = DirEntry::new(new_name, old_inode_id);
+            root_inode.write_at(
+                file_count * DIRENT_SZ,
+                dirent.as_bytes(),
+                &self.block_device,
+            );
+        });
+        block_cache_sync_all();
+        0
+    }
+
+    /// Delete a new hard link to a existing file
+    pub fn delete_hard_link(&self, name: &str) -> isize {
+        let op = |root_inode: &DiskInode| {
+            // assert it is a directory
+            assert!(root_inode.is_dir());
+            // has the file been created?
+            self.find_inode_id(name, root_inode)
+        };
+        if self.read_disk_inode(op).is_none() {
+            return -1;
+        }
+        // create a new file link
+        self.modify_disk_inode(|disk_inode| {
+            let mut dirent = DirEntry::empty();
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            for i in 0..file_count {
+                assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                );
+                if dirent.name() == name {
+                    let new = DirEntry::new("", 0);
+                    disk_inode.write_at(i * DIRENT_SZ, new.as_bytes(), &self.block_device);
+                    break;
+                }
+            }
+        });
+        block_cache_sync_all();
+        0
+    }
+
+    /// Count the number of hard links to a file
+    pub fn count_hard_links_num(&self, inode_id: u64) -> u32 {
+        let _fs = self.fs.lock();
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut num: u32 = 0;
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                );
+                if dirent.inode_id() == inode_id as u32 {
+                    num += 1;
+                }
+            }
+            num
+        })
+    }
+
+    /// Get the inode id by name
+    pub fn get_inode_id_hy_name(&self, name: &str) -> Option<u32> {
+        let _fs = self.fs.lock();
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            for i in 0..file_count {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
+                    DIRENT_SZ,
+                );
+                if dirent.name() == name {
+                    return Some(dirent.inode_id());
+                }
+            }
+            None
+        })
+    }
+
+    /// Get the inode id by name
+    pub fn get_inode_id(&self) -> Option<u32> {
+        let block_id = self.block_id as u32;
+        let block_offset = self.block_offset;
+        self.fs.clone().lock().get_inode_id(block_id, block_offset)
+    }
 }
