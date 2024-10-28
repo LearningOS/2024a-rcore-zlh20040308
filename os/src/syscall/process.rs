@@ -1,14 +1,14 @@
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
-    mm::{translated_ref, translated_refmut, translated_str},
+    mm::{translated_byte_buffer,translated_ref, translated_refmut, translated_str},
     task::{
         current_process, current_task, current_user_token, exit_current_and_run_next, pid2process,
         suspend_current_and_run_next, SignalFlags, TaskStatus,
     },
+    timer::get_time_us,
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
-
 #[repr(C)]
 #[derive(Debug)]
 pub struct TimeVal {
@@ -164,10 +164,42 @@ pub fn sys_kill(pid: usize, signal: u32) -> isize {
 /// HINT: What if [`TimeVal`] is splitted by two pages ?
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     trace!(
-        "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
+        "kernel:pid[{}] sys_get_time",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+    // 获取当前进程的页表 token
+    let token = current_user_token();
+    // 将用户传入的指针 ts 转换为内核可以访问的字节缓冲区
+    let byte_slices =
+        translated_byte_buffer(token, _ts as *const u8, core::mem::size_of::<TimeVal>());
+    // 获取当前的时间（假设返回的时间是以微秒为单位的 us）
+    let us = get_time_us();
+    // 创建一个 TimeVal 实例，包含秒数和微秒数
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    // 将 time_val 转换为字节数组
+    let time_val_bytes = unsafe {
+        core::slice::from_raw_parts(
+            &time_val as *const TimeVal as *const u8,
+            core::mem::size_of::<TimeVal>(),
+        )
+    };
+    // 使用 assert! 确保字节切片的总大小等于 TimeVal 的大小
+    assert!(
+        byte_slices.iter().map(|slice| slice.len()).sum::<usize>()
+            == core::mem::size_of::<TimeVal>(),
+        "Byte slices do not match the size of TimeVal"
+    );
+    // 把 time_val_bytes 拷贝到 byte_slices 中
+    let mut offset = 0;
+    for slice in byte_slices {
+        let len = slice.len();
+        slice.copy_from_slice(&time_val_bytes[offset..offset + len]);
+        offset += len;
+    }
+    0 // 成功返回 0
 }
 
 /// task_info syscall

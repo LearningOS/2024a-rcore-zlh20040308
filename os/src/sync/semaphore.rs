@@ -1,9 +1,9 @@
 //! Semaphore
 
 use crate::sync::UPSafeCell;
+use crate::task::current_process;
 use crate::task::{block_current_and_run_next, current_task, wakeup_task, TaskControlBlock};
 use alloc::{collections::VecDeque, sync::Arc};
-
 /// semaphore structure
 pub struct Semaphore {
     /// semaphore inner
@@ -30,12 +30,21 @@ impl Semaphore {
     }
 
     /// up operation of semaphore
-    pub fn up(&self) {
+    pub fn up(&self, sem_id: usize) {
         trace!("kernel: Semaphore::up");
         let mut inner = self.inner.exclusive_access();
         inner.count += 1;
         if inner.count <= 0 {
             if let Some(task) = inner.wait_queue.pop_front() {
+                let process = current_process();
+                let mut process_inner = process.inner_exclusive_access();
+                let enable_deadlock_detect = process_inner.enable_deadlock_detect;
+                if enable_deadlock_detect {
+                    let tid = task.inner_exclusive_access().res.as_ref().unwrap().tid;
+                    process_inner.allocation[tid][sem_id] += 1;
+                    process_inner.need[tid][sem_id] -= 1;
+                    process_inner.available[sem_id] -= 1;
+                }
                 wakeup_task(task);
             }
         }

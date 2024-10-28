@@ -49,6 +49,17 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    // enable deadlock detect
+    pub enable_deadlock_detect: bool,
+
+    pub available: Vec<u32>,
+    
+    // enable deadlock detect
+    pub allocation: Vec<Vec<u32>>,
+
+    // enable deadlock detect
+    pub need: Vec<Vec<u32>>,
+
 }
 
 impl ProcessControlBlockInner {
@@ -119,9 +130,14 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    enable_deadlock_detect: false,
+                    available: Vec::new(),
+                    allocation: vec![vec![]],
+                    need: vec![vec![]],
                 })
             },
         });
+        trace!("kernel: need init = {}", process.inner_exclusive_access().need.len());
         // create a main thread, we should allocate ustack and trap_cx here
         let task = Arc::new(TaskControlBlock::new(
             Arc::clone(&process),
@@ -245,6 +261,10 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    enable_deadlock_detect: parent.enable_deadlock_detect,
+                    available: Vec::new(),
+                    allocation: vec![vec![]],
+                    need: vec![vec![]],
                 })
             },
         });

@@ -51,3 +51,148 @@ $ git checkout ch<Number>
 $ cd ci-user
 $ make test CHAPTER=<Number>
 ```
+ch8_deadlock_sem1
+ch8_deadlock_sem2
+[ INFO] sys_semaphore_create
+[ INFO] available = [3] ,allocation = [[0]] ,need = [[0]]
+[ INFO] kernel:pid[2] tid[0] sys_semaphore_down sem_id = 0
+[ INFO] available = [3] ,allocation = [[0]] ,need = [[0]]
+[ INFO] kernel:pid[2] tid[0] sys_semaphore_down sem_id = 0
+[ INFO] available = [2] ,allocation = [[1]] ,need = [[0]]
+[ INFO] kernel:pid[2] tid[0] sys_semaphore_down sem_id = 0
+[ INFO] available = [1] ,allocation = [[2]] ,need = [[0]]
+[ INFO] sys_semaphore_create
+[ INFO] available = [0, 1] ,allocation = [[3, 0]] ,need = [[0, 0]]
+[ INFO] sys_semaphore_create
+[ INFO] available = [0, 1, 2] ,allocation = [[3, 0, 0]] ,need = [[0, 0, 0]]
+[ INFO] sys_semaphore_create
+[ INFO] available = [0, 1, 2, 1] ,allocation = [[3, 0, 0, 0]] ,need = [[0, 0, 0, 0]]
+Thread 1 started.
+Thread 1 is allocating resources.
+[ INFO] kernel:pid[2] tid[1] sys_semaphore_down sem_id = 2
+[ INFO] available = [0, 1, 2, 1] ,allocation = [[3, 0, 0, 0], [0, 0, 0, 0]] ,need = [[0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] kernel:pid[2] tid[1] sys_semaphore_down sem_id = 0
+[ INFO] available = [0, 1, 1, 1] ,allocation = [[3, 0, 0, 0], [0, 0, 1, 0]] ,need = [[0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] work = [0, 1, 1, 1]
+[ INFO] process_inner.need[0] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 1, 1, 1]
+[ INFO] process_inner.need[1] = [1, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] finish = [true, true]
+[ INFO] We are safe..............
+[ INFO] tid[1] gonna sleep
+[ INFO] need = [[0, 0, 0, 0], [1, 0, 0, 0]]
+Thread 2 started.
+Thread 2 is allocating resources.
+[ INFO] kernel:pid[2] tid[2] sys_semaphore_down sem_id = 1
+[ INFO] available = [0, 1, 1, 1] ,allocation = [[3, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0], [0, 0, 0, 0]] ,need = [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] kernel:pid[2] tid[2] sys_semaphore_down sem_id = 2
+[ INFO] available = [0, 0, 1, 1] ,allocation = [[3, 0, 0, 0], [0, 0, 1, 0], [0, 1, 0, 0], [0, 0, 0, 0]] ,need = [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] kernel:pid[2] tid[2] sys_semaphore_down sem_id = 0
+[ INFO] available = [0, 0, 0, 1] ,allocation = [[3, 0, 0, 0], [0, 0, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]] ,need = [[0, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] work = [0, 0, 0, 1]
+[ INFO] process_inner.need[0] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 0, 0, 1]
+[ INFO] process_inner.need[1] = [1, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 0, 1, 1]
+[ INFO] process_inner.need[2] = [1, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 1, 2, 1]
+[ INFO] process_inner.need[3] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] finish = [true, true, true, true]
+[ INFO] We are safe..............
+[ INFO] tid[2] gonna sleep
+[ INFO] need = [[0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0]]
+Thread 3 started.
+Thread 3 is allocating resources.
+[ INFO] kernel:pid[2] tid[3] sys_semaphore_down sem_id = 3
+[ INFO] available = [0, 0, 0, 1] ,allocation = [[3, 0, 0, 0], [0, 0, 1, 0], [0, 1, 1, 0], [0, 0, 0, 0]] ,need = [[0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] kernel:pid[2] tid[3] sys_semaphore_down sem_id = 0
+[ INFO] available = [0, 0, 0, 0] ,allocation = [[3, 0, 0, 0], [0, 0, 1, 0], [0, 1, 1, 0], [0, 0, 0, 1]] ,need = [[0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[0] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 0, 0, 0]
+[ INFO] process_inner.need[1] = [1, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 0, 1, 0]
+[ INFO] process_inner.need[2] = [1, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [3, 1, 2, 0]
+[ INFO] process_inner.need[3] = [1, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] finish = [true, true, true, true]
+[ INFO] We are safe..............
+[ INFO] tid[3] gonna sleep
+[ INFO] need = [[0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]]
+Releasing initial semaphores to start threads.
+[ INFO] kernel:pid[2] tid[0] sys_semaphore_up, sem_id = 0
+[ INFO] available = [1, 0, 0, 0] ,allocation = [[2, 0, 0, 0], [0, 0, 1, 0], [0, 1, 1, 0], [0, 0, 0, 1]] ,need = [[0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]]
+[ INFO] kernel:pid[2] tid[0] sys_semaphore_up, sem_id = 0
+[ INFO] available = [1, 0, 0, 0] ,allocation = [[1, 0, 0, 0], [1, 0, 1, 0], [0, 1, 1, 0], [0, 0, 0, 1]] ,need = [[0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0], [1, 0, 0, 0]]
+[ INFO] kernel:pid[2] tid[0] sys_semaphore_up, sem_id = 0
+[ INFO] available = [1, 0, 0, 0] ,allocation = [[0, 0, 0, 0], [1, 0, 1, 0], [1, 1, 1, 0], [0, 0, 0, 1]] ,need = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [1, 0, 0, 0]]
+Thread 1 finished initial allocation.
+Thread 1 attempting to acquire semaphore 1
+[ INFO] kernel:pid[2] tid[1] sys_semaphore_down sem_id = 1
+[ INFO] available = [0, 0, 0, 0] ,allocation = [[0, 0, 0, 0], [1, 0, 1, 0], [1, 1, 1, 0], [1, 0, 0, 1]] ,need = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[0] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[1] = [0, 1, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [1, 0, 1, 0]
+[ INFO] process_inner.need[2] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [2, 1, 2, 0]
+[ INFO] process_inner.need[3] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] finish = [true, true, true, true]
+[ INFO] We are safe..............
+[ INFO] tid[1] gonna sleep
+[ INFO] need = [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+Thread 2 finished initial allocation.
+Thread 2 attempting to acquire semaphore 3
+[ INFO] kernel:pid[2] tid[2] sys_semaphore_down sem_id = 3
+[ INFO] available = [0, 0, 0, 0] ,allocation = [[0, 0, 0, 0], [1, 0, 1, 0], [1, 1, 1, 0], [1, 0, 0, 1]] ,need = [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[0] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[1] = [0, 1, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [1, 0, 1, 0]
+[ INFO] process_inner.need[2] = [0, 0, 0, 1]
+[ INFO] bigger = true
+[ INFO] work = [2, 1, 2, 0]
+[ INFO] process_inner.need[3] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] finish = [true, true, true, true]
+[ INFO] We are safe..............
+[ INFO] tid[2] gonna sleep
+[ INFO] need = [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+Thread 3 finished initial allocation.
+Thread 3 attempting to acquire semaphore 2
+[ INFO] kernel:pid[2] tid[3] sys_semaphore_down sem_id = 2
+[ INFO] available = [0, 0, 0, 0] ,allocation = [[0, 0, 0, 0], [1, 0, 1, 0], [1, 1, 1, 0], [1, 0, 0, 1]] ,need = [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 0, 0]]
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[0] = [0, 0, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [0, 0, 0, 0]
+[ INFO] process_inner.need[1] = [0, 1, 0, 0]
+[ INFO] bigger = true
+[ INFO] work = [1, 0, 1, 0]
+[ INFO] process_inner.need[2] = [0, 0, 0, 1]
+[ INFO] bigger = true
+[ INFO] work = [2, 1, 2, 0]
+[ INFO] process_inner.need[3] = [0, 0, 1, 0]
+[ INFO] bigger = true
+[ INFO] finish = [true, true, true, true]
+[ INFO] We are safe..............
+[ INFO] tid[3] gonna sleep
+[ INFO] need = [[0, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]]

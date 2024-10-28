@@ -5,13 +5,13 @@ use crate::task::TaskControlBlock;
 use crate::task::{block_current_and_run_next, suspend_current_and_run_next};
 use crate::task::{current_task, wakeup_task};
 use alloc::{collections::VecDeque, sync::Arc};
-
+use crate::task::current_process;
 /// Mutex trait
 pub trait Mutex: Sync + Send {
     /// Lock the mutex
     fn lock(&self);
     /// Unlock the mutex
-    fn unlock(&self);
+    fn unlock(&self, mutex_id: usize);
 }
 
 /// Spinlock Mutex struct
@@ -45,7 +45,7 @@ impl Mutex for MutexSpin {
         }
     }
 
-    fn unlock(&self) {
+    fn unlock(&self, _mutex_id: usize) {
         trace!("kernel: MutexSpin::unlock");
         let mut locked = self.locked.exclusive_access();
         *locked = false;
@@ -92,11 +92,20 @@ impl Mutex for MutexBlocking {
     }
 
     /// unlock the blocking mutex
-    fn unlock(&self) {
+    fn unlock(&self, mutex_id: usize) {
         trace!("kernel: MutexBlocking::unlock");
         let mut mutex_inner = self.inner.exclusive_access();
         assert!(mutex_inner.locked);
         if let Some(waking_task) = mutex_inner.wait_queue.pop_front() {
+            let process = current_process();
+                let mut process_inner = process.inner_exclusive_access();
+                let enable_deadlock_detect = process_inner.enable_deadlock_detect;
+                if enable_deadlock_detect {
+                    let tid = waking_task.inner_exclusive_access().res.as_ref().unwrap().tid;
+                    process_inner.allocation[tid][mutex_id] += 1;
+                    process_inner.need[tid][mutex_id] -= 1;
+                    process_inner.available[mutex_id] -= 1;
+                }
             wakeup_task(waking_task);
         } else {
             mutex_inner.locked = false;
